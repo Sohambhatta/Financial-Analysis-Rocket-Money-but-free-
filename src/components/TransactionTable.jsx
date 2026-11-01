@@ -4,11 +4,6 @@ import { CATEGORIES } from '../utils/categorize';
 import { formatCurrency, formatDate } from '../utils/format';
 import { CATEGORY_COLORS } from './CategoryPieChart';
 
-const ACCOUNT_BADGE = {
-  debit: 'bg-indigo-500/15 text-indigo-300',
-  credit: 'bg-emerald-500/15 text-emerald-300',
-};
-
 export default function TransactionTable({
   transactions,
   onCategoryChange,
@@ -93,7 +88,6 @@ export default function TransactionTable({
             <tr className="border-b border-zinc-800 text-xs uppercase tracking-wide text-zinc-500">
               <th className="px-5 py-3 font-medium">Date</th>
               <th className="px-5 py-3 font-medium">Description</th>
-              <th className="px-5 py-3 font-medium">Account</th>
               <th className="px-5 py-3 font-medium text-right">Amount</th>
               <th className="px-5 py-3 font-medium">Category</th>
             </tr>
@@ -101,7 +95,7 @@ export default function TransactionTable({
           <tbody>
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-5 py-8 text-center text-zinc-500">
+                <td colSpan={4} className="px-5 py-8 text-center text-zinc-500">
                   No transactions match your filters.
                 </td>
               </tr>
@@ -110,15 +104,6 @@ export default function TransactionTable({
               <tr key={t.id} className="border-b border-zinc-800/60 last:border-0 hover:bg-zinc-800/30">
                 <td className="whitespace-nowrap px-5 py-2.5 text-zinc-400">{formatDate(t.date)}</td>
                 <td className="px-5 py-2.5 text-zinc-200">{t.description}</td>
-                <td className="px-5 py-2.5">
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-xs font-medium capitalize ${
-                      ACCOUNT_BADGE[t.account] || 'bg-zinc-700/40 text-zinc-300'
-                    }`}
-                  >
-                    {t.account || 'n/a'}
-                  </span>
-                </td>
                 <td
                   className={`whitespace-nowrap px-5 py-2.5 text-right font-medium ${
                     t.amount < 0 ? 'text-zinc-200' : 'text-emerald-400'

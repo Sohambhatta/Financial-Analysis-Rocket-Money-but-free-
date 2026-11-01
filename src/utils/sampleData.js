@@ -15,7 +15,7 @@ export function generateSampleTransactions() {
   const txs = [];
   let idCounter = 0;
 
-  // Recurring subscriptions are modeled as credit card charges (typical real-world pattern).
+  // Recurring subscriptions/bills.
   const recurring = [
     { desc: 'NETFLIX.COM', amount: -15.49 },
     { desc: 'SPOTIFY USA', amount: -11.99 },
@@ -34,13 +34,13 @@ export function generateSampleTransactions() {
       const day = 3 + Math.floor(Math.random() * 3);
       const date = new Date(base.getFullYear(), base.getMonth(), day);
       if (date <= today) {
-        txs.push({ date, description: r.desc, amount: r.amount, account: 'credit' });
+        txs.push({ date, description: r.desc, amount: r.amount });
       }
     });
   }
 
-  // Debit card: everyday essentials, rent, and payroll deposits.
-  const debitOneOff = [
+  // Everyday essentials, rent, and payroll deposits.
+  const essentials = [
     { desc: 'TRADER JOES #432', amountRange: [-20, -90] },
     { desc: 'WHOLE FOODS MARKET', amountRange: [-30, -120] },
     { desc: 'SHELL GAS STATION', amountRange: [-30, -65] },
@@ -49,8 +49,8 @@ export function generateSampleTransactions() {
     { desc: 'CVS PHARMACY', amountRange: [-10, -40] },
   ];
 
-  // Credit card: discretionary / online spending.
-  const creditOneOff = [
+  // Discretionary / online spending.
+  const discretionary = [
     { desc: 'UBER TRIP', amountRange: [-8, -45] },
     { desc: 'STARBUCKS COFFEE', amountRange: [-4, -9] },
     { desc: 'AMAZON.COM PURCHASE', amountRange: [-15, -150] },
@@ -61,7 +61,7 @@ export function generateSampleTransactions() {
 
   for (let m = 5; m >= 0; m--) {
     const base = addMonths(today, -m);
-    const genFor = (pool, account, countRange) => {
+    const genFor = (pool, countRange) => {
       const count = countRange[0] + Math.floor(Math.random() * (countRange[1] - countRange[0] + 1));
       for (let i = 0; i < count; i++) {
         const pick = pool[Math.floor(Math.random() * pool.length)];
@@ -70,11 +70,11 @@ export function generateSampleTransactions() {
         if (date > today) continue;
         const [lo, hi] = pick.amountRange;
         const amount = Math.round((lo + Math.random() * (hi - lo)) * 100) / 100;
-        txs.push({ date, description: pick.desc, amount, account });
+        txs.push({ date, description: pick.desc, amount });
       }
     };
-    genFor(debitOneOff, 'debit', [5, 8]);
-    genFor(creditOneOff, 'credit', [5, 8]);
+    genFor(essentials, [5, 8]);
+    genFor(discretionary, [5, 8]);
   }
 
   txs.sort((a, b) => a.date - b.date);
@@ -84,7 +84,6 @@ export function generateSampleTransactions() {
     date: t.date,
     description: t.description,
     amount: t.amount,
-    account: t.account,
     category: categorize(t.description),
   }));
 }

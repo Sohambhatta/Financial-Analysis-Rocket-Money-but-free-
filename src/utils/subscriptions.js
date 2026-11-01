@@ -41,11 +41,24 @@ export const SUBSCRIPTION_KEYWORDS = [
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
 
+// Generic noise words that commonly prefix real bank/card descriptions and
+// don't help identify the merchant (e.g. "CHECKCARD 0616 NETFLIX.COM CA").
+const MERCHANT_STOP_WORDS = new Set(['purchase', 'checkcard', 'pos', 'recurring', 'payment']);
+
 function normalizeMerchant(description) {
   return description
     .toLowerCase()
     .replace(/[^a-z0-9 ]/g, ' ')
-    .replace(/\s+/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    // Real statements embed per-transaction reference/date codes (e.g. "0616",
+    // "8774484820") right next to the merchant name -- these differ on every
+    // occurrence of the same recurring charge, so exact-match grouping would
+    // otherwise never recognize a subscription. Dropping pure-digit tokens
+    // keeps only the stable merchant-name words.
+    .filter((tok) => !/^\d+$/.test(tok))
+    .filter((tok) => !MERCHANT_STOP_WORDS.has(tok))
+    .join(' ')
     .trim();
 }
 
