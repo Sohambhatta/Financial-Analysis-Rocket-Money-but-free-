@@ -1,38 +1,55 @@
 import { useCallback, useRef, useState } from 'react';
-import { UploadCloud, FileText, ClipboardPaste, X } from 'lucide-react';
+import { UploadCloud, FileText, ClipboardPaste, X, CreditCard, Wallet2 } from 'lucide-react';
 
 const ACCEPTED_EXTENSIONS = ['.csv', '.txt'];
 
-export default function FileUploader({ onParseText }) {
+function readFileAsText(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => resolve({ name: file.name, text: e.target.result });
+    reader.onerror = () => reject(new Error(`Could not read "${file.name}"`));
+    // Reads happen entirely in-browser; file contents never leave this device.
+    reader.readAsText(file);
+  });
+}
+
+export default function FileUploader({ onFilesParsed }) {
   const [isDragging, setIsDragging] = useState(false);
   const [pasteOpen, setPasteOpen] = useState(false);
   const [pasteValue, setPasteValue] = useState('');
   const [error, setError] = useState('');
+  const [account, setAccount] = useState('debit');
   const inputRef = useRef(null);
 
   const handleFiles = useCallback(
-    (fileList) => {
-      const file = fileList?.[0];
-      if (!file) return;
+    async (fileList) => {
+      const files = Array.from(fileList || []);
+      if (!files.length) return;
 
-      const lowerName = file.name.toLowerCase();
-      const isAccepted = ACCEPTED_EXTENSIONS.some((ext) => lowerName.endsWith(ext)) || file.type === 'text/csv' || file.type === 'text/plain';
+      const accepted = [];
+      for (const file of files) {
+        const lowerName = file.name.toLowerCase();
+        const isAccepted =
+          ACCEPTED_EXTENSIONS.some((ext) => lowerName.endsWith(ext)) ||
+          file.type === 'text/csv' ||
+          file.type === 'text/plain';
+        if (isAccepted) accepted.push(file);
+      }
 
-      if (!isAccepted) {
-        setError('Please upload a .csv or .txt bank statement file.');
+      if (!accepted.length) {
+        setError('Please upload .csv or .txt bank statement files.');
         return;
       }
 
       setError('');
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        onParseText(e.target.result, file.name);
-      };
-      reader.onerror = () => setError('Could not read that file. Please try again.');
-      // Reads happen entirely in-browser; the file content never leaves this device.
-      reader.readAsText(file);
+      try {
+        const results = await Promise.all(accepted.map(readFileAsText));
+        onFilesParsed(results, account);
+      } catch {
+        setError('Could not read one or more of those files. Please try again.');
+      }
     },
-    [onParseText],
+    [account, onFilesParsed],
   );
 
   const onDrop = useCallback(
@@ -46,6 +63,32 @@ export default function FileUploader({ onParseText }) {
 
   return (
     <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5">
+      <div className="mb-4">
+        <p className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-500">
+          Which account is this statement for?
+        </p>
+        <div className="inline-flex rounded-lg border border-zinc-700 bg-zinc-950/60 p-1">
+          <button
+            type="button"
+            onClick={() => setAccount('debit')}
+            className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+              account === 'debit' ? 'bg-indigo-500/20 text-indigo-300' : 'text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            <Wallet2 size={14} /> Debit Card
+          </button>
+          <button
+            type="button"
+            onClick={() => setAccount('credit')}
+            className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+              account === 'credit' ? 'bg-emerald-500/20 text-emerald-300' : 'text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            <CreditCard size={14} /> Credit Card
+          </button>
+        </div>
+      </div>
+
       <div
         onDragOver={(e) => {
           e.preventDefault();
@@ -60,15 +103,23 @@ export default function FileUploader({ onParseText }) {
       >
         <UploadCloud size={32} className={isDragging ? 'text-emerald-400' : 'text-zinc-500'} />
         <div>
-          <p className="font-medium text-zinc-200">Drag &amp; drop your bank statement</p>
-          <p className="mt-1 text-sm text-zinc-500">.csv or .txt — parsed locally, never uploaded</p>
+          <p className="font-medium text-zinc-200">
+            Drag &amp; drop one or more {account} card statements
+          </p>
+          <p className="mt-1 text-sm text-zinc-500">
+            .csv or .txt, multiple months at once — parsed locally, never uploaded
+          </p>
         </div>
         <input
           ref={inputRef}
           type="file"
+          multiple
           accept=".csv,.txt,text/csv,text/plain"
           className="hidden"
-          onChange={(e) => handleFiles(e.target.files)}
+          onChange={(e) => {
+            handleFiles(e.target.files);
+            e.target.value = '';
+          }}
         />
       </div>
 
@@ -104,7 +155,7 @@ export default function FileUploader({ onParseText }) {
                 return;
               }
               setError('');
-              onParseText(pasteValue, 'Pasted statement');
+              onFilesParsed([{ name: `Pasted ${account} statement`, text: pasteValue }], account);
               setPasteValue('');
               setPasteOpen(false);
             }}
