@@ -1,12 +1,5 @@
 import { useMemo, useState, useCallback } from 'react';
-import {
-  PieChart as PieChartIcon,
-  LineChart as LineChartIcon,
-  RotateCcw,
-  Wallet2,
-  CreditCard,
-  Layers,
-} from 'lucide-react';
+import { PieChart as PieChartIcon, LineChart as LineChartIcon, RotateCcw } from 'lucide-react';
 import Header from './components/Header';
 import SummaryCards from './components/SummaryCards';
 import FileUploader from './components/FileUploader';
@@ -43,10 +36,9 @@ export default function App() {
   const [isSampleData, setIsSampleData] = useState(true);
   const [subscriptionStatus, setSubscriptionStatus] = useState({});
   const [parseNotice, setParseNotice] = useState('');
-  const [accountFilter, setAccountFilter] = useState('all');
   const [tableMonthFilter, setTableMonthFilter] = useState('All');
 
-  const handleFilesParsed = useCallback((fileResults, account) => {
+  const handleFilesParsed = useCallback((fileResults) => {
     let totalParsed = 0;
     let totalFailed = [];
     const newTransactions = [];
@@ -64,7 +56,6 @@ export default function App() {
           date: t.date,
           description: t.description,
           amount: t.amount,
-          account,
           category: categorize(t.description),
         });
       }
@@ -72,7 +63,7 @@ export default function App() {
 
     if (!newTransactions.length) {
       setParseNotice(
-        'Could not detect any transactions in those file(s). Try a standard CSV export with Date, Description, and Amount columns.',
+        'Could not detect any transactions in those file(s). Try a standard CSV/PDF export with Date, Description, and Amount columns.',
       );
       return;
     }
@@ -82,17 +73,12 @@ export default function App() {
     setSubscriptionStatus({});
     setUploadedSources((prev) => {
       const base = isSampleData ? [] : prev;
-      return [
-        ...base,
-        ...fileResults
-          .filter((f) => !totalFailed.includes(f.name))
-          .map((f) => ({ name: f.name, account })),
-      ];
+      return [...base, ...fileResults.filter((f) => !totalFailed.includes(f.name)).map((f) => ({ name: f.name }))];
     });
 
     const failedNote = totalFailed.length ? ` Could not parse: ${totalFailed.join(', ')}.` : '';
     setParseNotice(
-      `Parsed ${totalParsed} transaction${totalParsed === 1 ? '' : 's'} from ${fileResults.length - totalFailed.length} ${account} statement file(s).${failedNote}`,
+      `Parsed ${totalParsed} transaction${totalParsed === 1 ? '' : 's'} from ${fileResults.length - totalFailed.length} statement file(s).${failedNote}`,
     );
   }, [isSampleData]);
 
@@ -110,7 +96,6 @@ export default function App() {
     setIsSampleData(true);
     setSubscriptionStatus({});
     setParseNotice('');
-    setAccountFilter('all');
     setTableMonthFilter('All');
   }, []);
 
@@ -121,23 +106,16 @@ export default function App() {
     });
   }, []);
 
-  // Everything below derives from the account-filtered transaction set so the
-  // "All / Debit / Credit" toggle drives the whole dashboard at once.
-  const visibleTransactions = useMemo(
-    () => (accountFilter === 'all' ? transactions : transactions.filter((t) => t.account === accountFilter)),
-    [transactions, accountFilter],
-  );
+  const subscriptions = useMemo(() => detectSubscriptions(transactions), [transactions]);
 
-  const subscriptions = useMemo(() => detectSubscriptions(visibleTransactions), [visibleTransactions]);
-
-  const months = useMemo(() => monthsSpanned(visibleTransactions), [visibleTransactions]);
+  const months = useMemo(() => monthsSpanned(transactions), [transactions]);
 
   const totalMonthlySpending = useMemo(() => {
-    const totalSpend = visibleTransactions
+    const totalSpend = transactions
       .filter((t) => t.amount < 0)
       .reduce((sum, t) => sum + Math.abs(t.amount), 0);
     return totalSpend / months;
-  }, [visibleTransactions, months]);
+  }, [transactions, months]);
 
   const monthlyRecurringTotal = useMemo(
     () => subscriptions.reduce((sum, s) => sum + s.amount, 0),
@@ -157,7 +135,7 @@ export default function App() {
 
   const categoryData = useMemo(() => {
     const totals = new Map();
-    for (const t of visibleTransactions) {
+    for (const t of transactions) {
       if (t.amount >= 0) continue;
       const amt = Math.abs(t.amount);
       totals.set(t.category, (totals.get(t.category) || 0) + amt);
@@ -165,17 +143,14 @@ export default function App() {
     return Array.from(totals.entries())
       .map(([name, value]) => ({ name, value: Math.round(value * 100) / 100 }))
       .sort((a, b) => b.value - a.value);
-  }, [visibleTransactions]);
+  }, [transactions]);
 
-  const monthlySummary = useMemo(() => buildMonthlySummary(visibleTransactions), [visibleTransactions]);
+  const monthlySummary = useMemo(() => buildMonthlySummary(transactions), [transactions]);
 
   const monthOptions = useMemo(
     () => monthlySummary.map((m) => ({ monthKey: m.monthKey, label: m.label })),
     [monthlySummary],
   );
-
-  const debitCount = useMemo(() => transactions.filter((t) => t.account === 'debit').length, [transactions]);
-  const creditCount = useMemo(() => transactions.filter((t) => t.account === 'credit').length, [transactions]);
 
   return (
     <div className="min-h-screen bg-zinc-950 pb-16">
@@ -202,41 +177,6 @@ export default function App() {
             </button>
           </div>
           {parseNotice && <p className="text-sm text-indigo-300">{parseNotice}</p>}
-
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">View:</span>
-            <div className="inline-flex rounded-lg border border-zinc-700 bg-zinc-900/60 p-1">
-              <button
-                type="button"
-                onClick={() => setAccountFilter('all')}
-                className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                  accountFilter === 'all' ? 'bg-zinc-100 text-zinc-900' : 'text-zinc-400 hover:text-zinc-200'
-                }`}
-              >
-                <Layers size={13} /> All ({transactions.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setAccountFilter('debit')}
-                className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                  accountFilter === 'debit' ? 'bg-indigo-500/20 text-indigo-300' : 'text-zinc-400 hover:text-zinc-200'
-                }`}
-              >
-                <Wallet2 size={13} /> Debit ({debitCount})
-              </button>
-              <button
-                type="button"
-                onClick={() => setAccountFilter('credit')}
-                className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                  accountFilter === 'credit'
-                    ? 'bg-emerald-500/20 text-emerald-300'
-                    : 'text-zinc-400 hover:text-zinc-200'
-                }`}
-              >
-                <CreditCard size={13} /> Credit ({creditCount})
-              </button>
-            </div>
-          </div>
         </section>
 
         <SummaryCards
@@ -282,7 +222,7 @@ export default function App() {
 
         <section>
           <TransactionTable
-            transactions={visibleTransactions}
+            transactions={transactions}
             onCategoryChange={handleCategoryChange}
             monthOptions={monthOptions}
             monthFilter={tableMonthFilter}

@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "lucide-react": "^1.66.0",
+    "pdfjs-dist": "^6.5.438",
     "recharts": "^3.10.1"
   }
 }

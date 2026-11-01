@@ -137,6 +137,67 @@ function scoreHeaderRow(cells) {
   return score;
 }
 
+const INCOME_KEYWORDS = [
+  'deposit',
+  'payroll',
+  'salary',
+  'paycheck',
+  'refund',
+  'reversal',
+  'interest earned',
+  'cashback redemption',
+  'credit adjustment',
+];
+
+// Matches a line that starts with a date, ends with one or two currency
+// amounts (the second, if present, is treated as a running balance and
+// ignored), and has a merchant description in between. This is the shape
+// PDF text extraction typically produces, since there are no real table
+// cells/delimiters once a PDF is flattened to plain text.
+const FREEFORM_LINE_RE =
+  /^(\d{1,2}[/\-]\d{1,2}(?:[/\-]\d{2,4})?|[A-Za-z]{3,9}\.?\s+\d{1,2},?\s*\d{2,4})\s+(.+?)\s+(\(?-?\s?\$?\s?[\d,]+\.\d{2}\)?)(?:\s+\(?-?\s?\$?\s?[\d,]+\.\d{2}\)?)?$/;
+
+function inferFreeformSign(description, amountRaw) {
+  const hasExplicitSign = /^-|^\(.*\)$/.test(amountRaw.trim());
+  if (hasExplicitSign) return null; // let parseAmount's own sign stand
+  const text = description.toLowerCase();
+  return INCOME_KEYWORDS.some((kw) => text.includes(kw)) ? 1 : -1;
+}
+
+/**
+ * Fallback parser for free-form statement text with no consistent column
+ * delimiters -- the common case for text extracted from a PDF bank
+ * statement. Scans each line for a leading date and a trailing dollar
+ * amount.
+ * @param {string} text
+ * @returns {{date: Date, description: string, amount: number, raw: string[]}[]}
+ */
+function parseFreeformLines(text) {
+  const lines = text
+    .split(/\r\n|\r|\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  const transactions = [];
+  for (const line of lines) {
+    const match = line.match(FREEFORM_LINE_RE);
+    if (!match) continue;
+
+    const [, dateRaw, descRaw, amountRaw] = match;
+    const date = parseDate(dateRaw);
+    let amount = parseAmount(amountRaw);
+    const description = descRaw.replace(/\s{2,}/g, ' ').trim();
+
+    if (!date || Number.isNaN(amount) || !description) continue;
+
+    const sign = inferFreeformSign(description, amountRaw);
+    if (sign !== null) amount = sign * Math.abs(amount);
+
+    transactions.push({ date, description, amount, raw: [dateRaw, description, amountRaw] });
+  }
+  return transactions;
+}
+
 /**
  * Parses raw statement text into normalized transactions.
  * @param {string} text raw file contents or pasted text
@@ -145,6 +206,15 @@ function scoreHeaderRow(cells) {
 export function parseStatementText(text) {
   if (!text || !text.trim()) return [];
 
+  const structured = parseStructuredText(text);
+  const freeform = parseFreeformLines(text);
+  // Whichever strategy extracted more transactions wins -- clean CSV/TSV
+  // exports parse well structurally, while PDF-derived text usually only
+  // matches the free-form line scanner.
+  return freeform.length > structured.length ? freeform : structured;
+}
+
+function parseStructuredText(text) {
   const lines = text
     .split(/\r\n|\r|\n/)
     .map((l) => l.trim())
